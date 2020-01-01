@@ -1328,3 +1328,400 @@ Promise.race([car1, car2, car3])
     console.log("Promise Rejected", err);
   });
 ```
+
+### Async/Await
+
+之前创建一个异步的可以使用
+
+```js
+const doAsyncTask = () => Promise.resolve("done");
+```
+
+使用Promise, 可以使用then串联
+
+```js
+const doAsyncTask = () => Promise.resolve("done");
+doAsyncTask().then(val => console.log(val));
+console.log("here"); // <-- this is called first!
+```
+
+如果使用Async/Await, 不需要使用then
+
+```js
+const doAsyncTask = () => Promise.resolve("done");
+async function asimc() {
+  // <-- mark it as `async`
+  // change async to sync
+  let value = await doAsyncTask(); // <-- Don't need to call .then
+  console.log(value);
+}
+asimc();
+
+// asimc().then(val => console.log('again: ', val))
+```
+
+util.promisify工作原理和bluebird里面的Promise.promisify类似
+
+```js
+const util = require('util')
+function asy(data, aa, cb) { //cb 是一个函数
+  try {
+    return cb(null, aa)；
+  }catch(err) {
+    if(err) return cb(err);
+  }
+}
+
+const a = util.promisify(asy)
+a(222, 333).then(val => console.log('aaa->', val)).catch(err => console.error(err))
+```
+
+Async/Await 和Promise可以混用。
+
+既然异步代码性能更好，为什么await变成同步？（程序流程更加清晰，更加可控，这种性能损耗可以忽略）。
+
+可以理解Asycn/Await 是promise 一种语法糖。
+
+还可以用立即执行函数(IIFE)
+
+```js
+const doAsyncTask = () => Promise.resolve("done");
+(async function() {
+  // <-- IIFE, note the async
+  let value = await doAsyncTask(); // <-- Don't need to call .then
+  console.log(value);
+})();
+```
+
+遇到await 就block了, 虽然block, 但是程序变得可控。外面还是异步的。
+
+```js
+const doAsyncTask = () => Promise.resolve("1");
+(async function() {
+  let value = await doAsyncTask();
+  console.log(value);
+  console.log("2"); //----> This waits before it's printed
+})();
+```
+
+如果没有await 就变成异步
+
+```js
+const doAsyncTask = () => Promise.resolve("1");
+(async function() {
+  doAsyncTask().then(console.log);
+  console.log("2");
+})();
+```
+
+#### async 函数返回的是一个promise
+
+既然是promise，肯定可以then, 也可以用catch 来捕捉异常。
+
+```js
+const doAsyncTask = () => Promise.resolve("1");
+let asyncFunction = async function() {
+  let value = await doAsyncTask();
+  console.log(value);
+  console.log("2");
+  return "3"; // Whatever we return is like a resolve
+};
+asyncFunction().then(v => console.log(v)); // We can attach a then to it
+```
+
+#### 错误捕捉
+
+异步代码使用try catch捕捉不到。后来用.catch, 或者then 的第二个函数参数捕捉。
+
+因为通过await, 把async 变成了sync, 所以可以使用try...catch 来捕捉。catch的值是reject的值。
+
+```js
+const doAsyncTask = () => Promise.reject("hey!");
+const asyncFunction = async function() {
+  try {
+    const value = await doAsyncTask();
+  } catch (e) {
+    console.error("Catch reject value: ", e);
+    return;
+  }
+};
+asyncFunction();
+```
+
+#### 租塞意味着慢
+
+因为租塞，所以并不高效。例如读取多个文件。可以使用console.time测试一下。
+
+```js
+const util = require("util");
+const fs = require("fs");
+const readFile = util.promisify(fs.readFile);
+
+const files = ["./files/demofile.txt", "./files/demofile.other.txt"];
+
+(async () => {
+  for (let name of files) {
+    console.log(await readFile(name, "utf8")); // <-- One file loaded at a time, instead of all files at once
+  }
+})();
+```
+
+#### async 其实并不神秘
+
+下面代码执行的结果是什么
+
+```js
+async function printLine1() {
+  console.log("1");
+}
+
+async function printLine2() {
+  console.log("2");
+}
+
+async function main() {
+  printLine1();
+  printLine2();
+}
+main();
+console.log("Finished");
+```
+
+上面这个是同步的，下面的是异步的。
+
+```js
+async function printLine1() {
+  const val = await Promise.resolve("1");
+  return val;
+}
+
+async function printLine2() {
+  const val = await Promise.resolve("2");
+  return val;
+}
+
+async function main() {
+  printLine1().then(val => console.log(val));
+  printLine2().then(val => console.log(val));
+}
+main();
+console.log("Finished");
+```
+
+async需要配上await, 才可以生成异步。
+
+#### async 迭代器
+
+之前提过Promise.all, 它是等待多个promise执行完成后返回一个array值。那么async 有一个实验特性 (async 迭代器)
+
+还没有完全支持在浏览器和node中, 可以这样执行
+
+```
+node --harmony-async-iteration working.js
+```
+
+```js
+(async () => {
+  const util = require("util");
+  const fs = require("fs");
+  const readFile = util.promisify(fs.readFile);
+
+  const files = ["./files/demofile.txt", "./files/demofile.other.txt"];
+  const promises = files.map(name => readFile(name, "utf8"));
+  for await (let content of promises) {
+    //<-- See the await is on the for
+    console.log(content);
+  }
+})();
+```
+
+#### 自定义迭代器
+
+我们可用```for-await-of```迭代一个内建promise 数组。
+
+数组是一个迭代器， 迭代器里面的元素有一个属性叫```Symbol.iterator```。 它指向迭代器中一个元素。这个元素有一个next()方法，
+它返回一个对象```{done: false, value: ???}```。如果迭代器结束，返回的done是true。
+
+使用for...of 迭代一个自定义迭代器。
+
+```js
+const customIterator = () => ({
+  [Symbol.iterator]: () => ({
+    x: 0, // initial value
+    next() {
+      // iterator <100 number
+      if (this.x > 100) {
+        return {
+          done: true,
+          value: this.x
+        };
+      }
+      return {
+        done: false,
+        value: this.x++
+      };
+    }
+  })
+});
+
+for (let x of customIterator()) {
+  console.log(x);
+}
+```
+
+#### 自定义async 迭代器
+
+参照上面的列子，可以定义一个async迭代器，通过```Symbol.asyncIterator```使用for...await...of语法访问。但是确保里面返回的是一个promise对象
+
+```js
+const customAsyncIterator = () => ({
+  [Symbol.asyncIterator]: () => ({
+    x: 0,
+    next() {
+      if (this.x > 100) {
+        return Promise.resolve({
+          done: true,
+          value: this.x
+        });
+      }
+
+      let y = this.x++;
+
+      return Promise.resolve({
+        done: false,
+        value: y
+      });
+    }
+  })
+});
+
+(async () => {
+  for await (let x of customAsyncIterator()) {
+    console.log(x);
+  }
+})();
+```
+
+### Generators
+
+Generators定义的函数和普通函数有区别
+
+```js
+  function* greet() {
+    //...
+  }
+  let g = greet();
+```
+
+调用后不会立刻执行。普通函数声明调用后会执行完毕，Generators是运行，停止 -> 保留现场出去， 再回来运行。
+
+- 一般函数运行后，要么完成，要么出错
+- Generators可以在运行过程中停止，让你做一些别的事(异步?), 别的事做完了，再回来，从刚才出去的位置继续运行。
+- 外部无法阻止内部运行, Generators只能通过自己的yield来暂停执行
+- 自己停止的，自己恢复(next())
+
+```js
+function* demo() {
+  console.log("1");
+  yield;
+  console.log("2");
+}
+console.log("start");
+const it = demo(); // Doesn't execute the body of the function
+console.log("before iteration");
+console.log(it.next()); // Executes generator and prints out whats yielded
+console.log(it.next()); // Returns done: true
+console.log(it.next()); // Returns same ended iterator
+console.log("after iteration");
+```
+
+注意next()返回的是一个对象```{value: xxx, done: <boolean>```
+
+
+通过yield 把数据抛出来
+
+```js
+function* range() {
+  for (let i = 0; i < 4; i++) {
+    yield i; // <-- We can return data from yield
+  }
+  yield "moo";
+  return "foo"; // 提前标志done: true, 不然到下一个next()才知道是不是done
+}
+const it = range();
+console.log(it.next()); // { value: 0, done: false }
+console.log(it.next()); // { value: 1, done: false }
+console.log(it.next()); // { value: 2, done: false }
+console.log(it.next()); // { value: 3, done: false }
+console.log(it.next()); // { value: 'moo', done: false }
+console.log(it.next()); // { value: 'foo', done: true }
+console.log(it.next()); // { value: undefined, done: true }
+```
+
+遇到return 表明函数已经执行结束，后面再next() 将会获得undefined value。
+
+使用迭代器迭代generators
+
+```js
+function* range() {
+  for (let i = 0; i < 10; i++) {
+    yield i;
+  }
+}
+
+for (let x of range()) { // 隐式调用next()
+  console.log(x); // Just prints the value
+}
+```
+
+yield 通信是双向的，可以传递值出去，也可以接收值进来.
+
+```js
+function* sayWhat() {
+  console.log(yield);
+  console.log("World");
+}
+const it = sayWhat();
+it.next(); // 遇到第一个yield,停止
+it.next("Hello"); // 从上次停止的地方继续执行，将值传到上次yield的地方
+```
+
+#### 自定义异步Generators
+
+使用generators和for-await-of
+
+```js
+function* range() {
+  for (let i = 0; i < 10; i++) {
+    yield Promise.resolve(i);
+  }
+}
+
+(async () => {
+  for (let x of range()) {
+    console.log(x); // <-- This just prints out the promise
+  }
+})();
+
+console.log('end...');
+```
+
+注意上面还是同步执行的。打印出promise对象。你可以使用for await,但是只能在迭代器自己上await.
+
+```js
+function* range() {
+  for (let i = 0; i < 10; i++) {
+    yield Promise.resolve(i);
+  }
+}
+
+(async () => {
+  for await (let x of range()) { // <-- Await in the iterator
+    console.log(x); // <-- This just prints out the promise
+  }
+})();
+
+console.log('end...');
+```
+
+上面就变成异步的了。（async/await要配对）
