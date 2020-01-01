@@ -10,6 +10,12 @@
 * Class
 * Module 语法
 * 编程风格(Guideline)
+  - https://github.com/elsewhencode/project-guidelines#code-style-check
+  - https://github.com/airbnb/javascript
+  - https://github.com/lin-123/javascript
+  - https://github.com/airbnb/javascript/tree/master/react
+  - https://github.com/JasonBoy/javascript/tree/master/react
+
 
 
 ## 定义对象
